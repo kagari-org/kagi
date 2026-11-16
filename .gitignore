@@ -1,0 +1,5 @@
+/.direnv
+/result
+/target
+/.kagi-test
+/host_ed25519

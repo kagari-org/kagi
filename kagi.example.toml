@@ -1,0 +1,124 @@
+# kagi example configuration.
+#
+# Replace the placeholder public keys with real `authorized_keys` lines.
+# Host key: if `server.host_key` is omitted, kagi generates
+# `<config dir>/host_ed25519` on first start and reuses it afterwards.
+
+[server]
+listen = "0.0.0.0:2222"
+# host_key = "/var/lib/kagi/host_ed25519"
+default_policy = "deny"            # deny = whitelist mode; allow = blacklist mode
+allow_remote_forward = false       # global -R switch; admin is NOT exempt
+max_auth_attempts = 3
+max_sessions_per_user = 16         # admin exempt
+max_sessions = 1024                # global non-admin sessions
+max_connections_per_ip = 20        # applies to admin too
+connection_rate_per_min = 60       # applies to admin too
+auth_failures_per_min = 10         # failed auth only; success resets
+auth_cooldown_secs = 60
+inactivity_timeout_secs = 3600
+keepalive_interval_secs = 30
+keepalive_max = 3
+connect_timeout_secs = 10
+resolve_timeout_secs = 5
+max_direct_channels_per_conn = 256
+max_direct_channels_global = 4096
+max_direct_channels_per_user = 256  # admin exempt
+max_remote_forwards_per_conn = 32
+max_remote_forwards_per_user = 32   # admin exempt
+max_remote_forwards_global = 512    # non-admin total
+max_streams_per_user = 16
+stream_broadcast_capacity = 1024
+stream_retained_timeout_secs = 300  # only retained when FIFO has undelivered data
+
+[animation]
+enabled = true                    # TTY 普通用户显示转发状态
+interval_ms = 3000
+ascii = false
+
+[log]
+level = "info"
+format = "text"                    # text | json
+
+[groups.dev]
+
+[[groups.dev.rules]]
+action = "allow"
+host = "*.corp.example.com"
+match = "glob"                     # glob | regex | exact
+port = 443
+
+[[groups.dev.rules]]
+action = "allow"
+cidr = "10.0.0.0/8"
+port = "1-65535"
+
+[[groups.dev.rules]]
+action = "deny"
+cidr = "169.254.169.254/32"
+port = "*"
+
+[groups.guests]
+
+[[groups.guests.rules]]
+action = "allow"
+host = "public.example.com"
+port = "80,443"
+
+[users.alice]
+# stream_buffer_bytes = 8388608   # per stream channel FIFO, default 8 MiB
+keys = [
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHkMAvp0cS7sdAO+hh4b+Z98LN7VenOfIsSIwrbWK+BI example",
+]
+groups = ["dev"]
+admin = false
+enabled = true                    # TTY 普通用户显示转发状态
+
+[[users.alice.rules]]
+action = "deny"
+host = "db.corp.example.com"
+port = "5432"
+
+# Admin TUI is opened with `ssh -t admin@host admin`.
+[users.admin]
+keys = [
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH/HSMU8U1H76t8hTSkwlqloXujrwpSyrI5HtiUwcAIi example",
+]
+groups = ["dev"]
+admin = true
+enabled = true                    # TTY 普通用户显示转发状态
+
+# `anonymous` is a normal configured user whose key check is disabled.
+# Any key (or `none`) may authenticate as `anonymous`; it still needs rules.
+[users.anonymous]
+keys = []
+skip_key_check = true
+groups = ["guests"]
+admin = false
+enabled = true                    # TTY 普通用户显示转发状态
+
+[[users.anonymous.rules]]
+action = "allow"
+host = "*.example.com"
+port = "80,443"
+
+# User names can be matched by glob or regex so multiple SSH logins share one entry.
+# Exact is the default; exact entries win, and overlapping patterns are rejected as ambiguous.
+#
+# [users."team-*"]
+# match = "glob"                   # exact | glob | regex (case-sensitive)
+# keys = ["ssh-ed25519 AAAA... example"]
+# groups = ["dev"]
+
+# To allow remote forwarding globally, set server.allow_remote_forward = true
+# and add listen rules, for example:
+#
+# [[groups.dev.rules]]
+# action = "allow"
+# forward = "listen"
+# host = "127.0.0.1"
+# port = "9000-9100"
+#
+# Random listen port: use port = "*" in a listen rule, then the client can
+# request `ssh -R 0:target_host:target_port ...` and OpenSSH will receive
+# the kernel-assigned port.

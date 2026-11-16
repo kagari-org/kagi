@@ -1,0 +1,30 @@
+[package]
+name = "kagi"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+russh = { version = "0.65.1", default-features = false, features = ["ring", "flate2"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time", "fs", "signal"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
+regex = "1"
+globset = "0.4"
+ipnet = { version = "2", features = ["serde"] }
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+clap = { version = "4", features = ["derive"] }
+ratatui = "0.30"
+termwiz = "0.23"
+vt100 = "0.16"
+hickory-resolver = "0.26"
+dashmap = "6"
+arc-swap = "1"
+tokio-util = { version = "0.7", features = ["rt"] }
+bytes = "1"
+shell-words = "1"
+rand = "0.10"
+
+[dev-dependencies]
+tempfile = "3"
