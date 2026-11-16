@@ -5,14 +5,14 @@
 # `<config dir>/host_ed25519` on first start and reuses it afterwards.
 
 [server]
-listen = "0.0.0.0:2222"
+listen = "[::]:22"
 # host_key = "/var/lib/kagi/host_ed25519"
 default_policy = "deny"            # deny = whitelist mode; allow = blacklist mode
 allow_remote_forward = false       # global -R switch; admin is NOT exempt
 max_auth_attempts = 3
 max_sessions_per_user = 16         # admin exempt
 max_sessions = 1024                # global non-admin sessions
-max_connections_per_ip = 20        # applies to admin too
+max_connections_per_ip = 20        # applies to admin too; IPv6 uses /64
 connection_rate_per_min = 60       # applies to admin too
 auth_failures_per_min = 10         # failed auth only; success resets
 auth_cooldown_secs = 60

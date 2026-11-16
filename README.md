@@ -39,7 +39,7 @@ On first start, kagi generates an Ed25519 host key at `<config dir>/host_ed25519
 host_key = "/var/lib/kagi/host_ed25519"
 ```
 
-The default listen address is `0.0.0.0:2222`. Bind it to a private interface or protect it with a firewall in production.
+The default listen address is `[::]:22`. Port 22 normally requires root or `CAP_NET_BIND_SERVICE`. On Linux this is normally dual-stack (IPv6 and IPv4). Bind it to a private interface or protect it with a firewall in production; if your system sets `net.ipv6.bindv6only=1`, use an explicit `0.0.0.0:22` or `[::]:22` listener as appropriate.
 
 ## Client recipes
 
@@ -244,7 +244,7 @@ All limits are configurable. These are the defaults:
 | `stream_buffer_bytes` | 8 MiB per channel |
 | `stream_broadcast_capacity` | 1024 |
 | `stream_retained_timeout_secs` | 300 |
-| `max_connections_per_ip` | 20 |
+| `max_connections_per_ip` | 20 (IPv6 /64) |
 | `connection_rate_per_min` | 60 |
 | `auth_failures_per_min` | 10 |
 | `auth_cooldown_secs` | 60 |
@@ -255,7 +255,7 @@ All limits are configurable. These are the defaults:
 | `connect_timeout_secs` | 10 |
 | `resolve_timeout_secs` | 5 |
 
-Admins are exempt from user/global quotas. They are not exempt from pre-auth IP rate limits; successful authentication clears the per-IP auth-failure counter.
+Admins are exempt from user/global quotas. They are not exempt from pre-auth IP rate limits; successful authentication clears the per-IP auth-failure counter. SSH `none` probes and key-offer probes do not count as failures; only rejected `publickey` / `password` / keyboard-interactive attempts do. IPv6 peers are counted by `/64`.
 
 `inactivity_timeout_secs` is an SSH connection-level inactivity timeout. Keepalive responses count as inbound activity. It is not a per-channel idle timeout.
 

@@ -313,14 +313,14 @@ impl Handler for KagiHandler {
             return Ok(Self::reject());
         }
         if !Self::valid_login_name(user) {
-            return Ok(self.auth_reject());
+            return Ok(Self::reject());
         }
         let policy = self.shared.policy.load_full();
         let Some(account) = policy.user_for_login(user) else {
-            return Ok(self.auth_reject());
+            return Ok(Self::reject());
         };
         if !account.enabled || !account.skip_key_check {
-            return Ok(self.auth_reject());
+            return Ok(Self::reject());
         }
         let subject = Subject::new(account.name.clone());
         if !self.session_limit_ok(account.admin, &subject) {
@@ -981,5 +981,60 @@ impl Drop for KagiHandler {
         } else {
             info!("unauthenticated session {} closed", self.session_id);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use std::sync::Mutex;
+    use std::sync::atomic::AtomicUsize;
+
+    use arc_swap::ArcSwap;
+    use russh::server::{Auth, Handler as _};
+
+    use crate::audit::AuditLog;
+    use crate::config::parse;
+    use crate::policy::{Policy, SystemResolver};
+    use crate::registry::Registry;
+
+    use super::{KagiHandler, Shared};
+
+    fn handler_with_key_only_user() -> KagiHandler {
+        let config = parse(
+            r#"
+            [server]
+            listen = "127.0.0.1:0"
+
+            [users.alice]
+            keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICZRpEeOxDuYT0I2Pbcuvfq9fBwiBLBZFiV3G5Uh6eL3 test"]
+            "#,
+        )
+        .unwrap();
+        let policy = Arc::new(Policy::build(config, 1).unwrap());
+        let shared = Arc::new(Shared {
+            policy: ArcSwap::from(policy),
+            registry: Arc::new(Registry::new(16)),
+            audit: Arc::new(AuditLog::new(16)),
+            resolver: Arc::new(SystemResolver::for_test()),
+            rate_limiter: Arc::new(super::super::rate_limit::RateLimiter::new(2, 100, 2, 60)),
+            active_direct: AtomicUsize::new(0),
+            config_path: PathBuf::from("unused.toml"),
+            reload_lock: Mutex::new(()),
+        });
+        KagiHandler::new(shared, 1, None)
+    }
+
+    #[tokio::test]
+    async fn none_probes_do_not_count_as_auth_failures() {
+        let mut handler = handler_with_key_only_user();
+        for _ in 0..20 {
+            assert!(matches!(
+                handler.auth_none("alice").await,
+                Ok(Auth::Reject { .. })
+            ));
+        }
+        assert!(!handler.auth_blocked());
     }
 }

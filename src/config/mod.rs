@@ -391,7 +391,7 @@ fn default_true() -> bool {
 }
 
 fn default_listen() -> String {
-    "0.0.0.0:2222".to_string()
+    "[::]:22".to_string()
 }
 
 fn default_max_auth_attempts() -> usize {

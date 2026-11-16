@@ -1,9 +1,28 @@
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 const WINDOW: Duration = Duration::from_secs(60);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum PeerKey {
+    V4(Ipv4Addr),
+    V6([u8; 8]),
+}
+
+impl PeerKey {
+    fn from_ip(ip: IpAddr) -> Self {
+        match ip {
+            IpAddr::V4(ip) => Self::V4(ip),
+            IpAddr::V6(ip) => {
+                let mut prefix = [0u8; 8];
+                prefix.copy_from_slice(&ip.octets()[..8]);
+                Self::V6(prefix)
+            }
+        }
+    }
+}
 
 #[derive(Debug)]
 struct PeerState {
@@ -42,7 +61,7 @@ impl PeerState {
 }
 
 pub struct RateLimiter {
-    inner: Mutex<HashMap<IpAddr, PeerState>>,
+    inner: Mutex<HashMap<PeerKey, PeerState>>,
     max_active: usize,
     max_connections_per_min: u32,
     max_failures_per_min: u32,
@@ -52,12 +71,12 @@ pub struct RateLimiter {
 
 pub struct ConnectionGuard {
     limiter: Arc<RateLimiter>,
-    ip: IpAddr,
+    key: PeerKey,
 }
 
 impl Drop for ConnectionGuard {
     fn drop(&mut self) {
-        self.limiter.close(self.ip);
+        self.limiter.close(self.key);
     }
 }
 
@@ -82,7 +101,8 @@ impl RateLimiter {
         let now = Instant::now();
         let mut inner = self.inner.lock().ok()?;
         self.cleanup(&mut inner, now);
-        let state = inner.entry(ip).or_insert_with(|| PeerState::new(now));
+        let key = PeerKey::from_ip(ip);
+        let state = inner.entry(key).or_insert_with(|| PeerState::new(now));
         state.last_seen = now;
         state.reset_window(now);
         if state.cooldown_until.is_some_and(|until| until > now) {
@@ -98,13 +118,13 @@ impl RateLimiter {
         state.active += 1;
         Some(ConnectionGuard {
             limiter: Arc::clone(self),
-            ip,
+            key,
         })
     }
 
-    fn close(&self, ip: IpAddr) {
+    fn close(&self, key: PeerKey) {
         if let Ok(mut inner) = self.inner.lock()
-            && let Some(state) = inner.get_mut(&ip)
+            && let Some(state) = inner.get_mut(&key)
         {
             state.active = state.active.saturating_sub(1);
             state.last_seen = Instant::now();
@@ -117,7 +137,7 @@ impl RateLimiter {
             return false;
         };
         inner
-            .get(&ip)
+            .get(&PeerKey::from_ip(ip))
             .and_then(|state| state.cooldown_until)
             .is_some_and(|until| until > now)
     }
@@ -127,7 +147,9 @@ impl RateLimiter {
         let Ok(mut inner) = self.inner.lock() else {
             return;
         };
-        let state = inner.entry(ip).or_insert_with(|| PeerState::new(now));
+        let state = inner
+            .entry(PeerKey::from_ip(ip))
+            .or_insert_with(|| PeerState::new(now));
         state.last_seen = now;
         state.reset_window(now);
         state.failures = state.failures.saturating_add(1);
@@ -141,14 +163,16 @@ impl RateLimiter {
         let Ok(mut inner) = self.inner.lock() else {
             return;
         };
-        let state = inner.entry(ip).or_insert_with(|| PeerState::new(now));
+        let state = inner
+            .entry(PeerKey::from_ip(ip))
+            .or_insert_with(|| PeerState::new(now));
         state.last_seen = now;
         state.failures = 0;
         state.failure_started = now;
         state.cooldown_until = None;
     }
 
-    fn cleanup(&self, inner: &mut HashMap<IpAddr, PeerState>, now: Instant) {
+    fn cleanup(&self, inner: &mut HashMap<PeerKey, PeerState>, now: Instant) {
         let Ok(mut last) = self.last_cleanup.lock() else {
             return;
         };
@@ -194,5 +218,19 @@ mod tests {
         assert!(limiter.is_blocked(ip));
         limiter.auth_success(ip);
         assert!(!limiter.is_blocked(ip));
+    }
+
+    #[test]
+    fn ipv6_failures_are_grouped_by_64() {
+        let limiter = limiter();
+        let a = "2001:db8:1:2::1".parse().unwrap();
+        let b = "2001:db8:1:2::2".parse().unwrap();
+        let other = "2001:db8:1:3::1".parse().unwrap();
+        limiter.auth_failure(a);
+        assert!(!limiter.is_blocked(b));
+        limiter.auth_failure(b);
+        assert!(limiter.is_blocked(a));
+        assert!(limiter.is_blocked(b));
+        assert!(!limiter.is_blocked(other));
     }
 }

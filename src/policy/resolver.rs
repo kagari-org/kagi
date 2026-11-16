@@ -17,6 +17,20 @@ impl SystemResolver {
         Ok(Self { inner })
     }
 
+    #[cfg(test)]
+    pub fn for_test() -> Self {
+        use hickory_resolver::config::ResolverConfig;
+        use hickory_resolver::net::runtime::TokioRuntimeProvider;
+
+        let inner = TokioResolver::builder_with_config(
+            ResolverConfig::from_name_servers(Vec::new()),
+            TokioRuntimeProvider::default(),
+        )
+        .build()
+        .expect("test resolver");
+        Self { inner }
+    }
+
     pub async fn resolve(&self, host: &str) -> Result<Vec<IpAddr>> {
         let lookup = self
             .inner

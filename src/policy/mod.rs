@@ -442,8 +442,12 @@ pub async fn resolve_target(
 
 pub fn normalize_bind_address(raw: &str) -> Result<IpAddr> {
     let raw = raw.trim();
+    let raw = raw
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(raw);
     if raw.is_empty() || raw == "*" {
-        return Ok("0.0.0.0".parse().unwrap());
+        return Ok("::".parse().unwrap());
     }
     if raw.eq_ignore_ascii_case("localhost") {
         return Ok("127.0.0.1".parse().unwrap());
@@ -580,6 +584,22 @@ mod tests {
         assert_eq!(policy.user_for_login("team-dev").unwrap().name, "team-*");
         assert_eq!(policy.user_for_login("svc-42").unwrap().name, "svc-[0-9]+");
         assert!(policy.user_for_login("svc-x").is_none());
+    }
+
+    #[test]
+    fn normalizes_bind_addresses() {
+        assert_eq!(
+            normalize_bind_address("*").unwrap(),
+            "::".parse::<IpAddr>().unwrap()
+        );
+        assert_eq!(
+            normalize_bind_address("[::1]").unwrap(),
+            "::1".parse::<IpAddr>().unwrap()
+        );
+        assert_eq!(
+            normalize_bind_address("localhost").unwrap(),
+            "127.0.0.1".parse::<IpAddr>().unwrap()
+        );
     }
 
     #[test]
