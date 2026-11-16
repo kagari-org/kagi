@@ -560,10 +560,12 @@ impl Registry {
         Ok(channel)
     }
 
-    pub fn close_stream(&self, key: &StreamKey) {
-        if let Some(channel) = self.streams.get(key) {
+    fn close_stream(&self, key: &StreamKey) {
+        // Drop the DashMap read guard before removing from the same shard.
+        let channel = self.streams.get(key).map(|entry| Arc::clone(&entry));
+        if let Some(channel) = channel {
             channel.close();
-            if channel.value().as_ref().pending_bytes() == 0 && channel.subscriber_count() == 0 {
+            if channel.pending_bytes() == 0 && channel.subscriber_count() == 0 {
                 self.streams.remove(key);
             }
         }
