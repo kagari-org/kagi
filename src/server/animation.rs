@@ -27,7 +27,6 @@ pub async fn run(
         return;
     }
 
-    let _ = handle.data(channel, b"\r\n".to_vec()).await;
     let started = Instant::now();
     let mut tick: usize = 0;
     let mut drawn = 0usize;
@@ -97,8 +96,6 @@ pub async fn run(
             _ = tokio::time::sleep(interval) => {}
         }
     }
-
-    let _ = handle.data(channel, b"\r\n".to_vec()).await;
 }
 
 async fn draw(handle: &Handle, channel: ChannelId, lines: &[String], drawn: &mut usize) -> bool {
